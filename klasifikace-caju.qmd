@@ -1,0 +1,252 @@
+---
+title: "Klasifikace dotazů ze Search Console pomocí OpenAI API"
+author: "Marek Prokop"
+date: last-modified
+date-format: "D. M. YYYY"
+execute: 
+  echo: true
+  warning: false
+  error: false
+format:
+  gfm: default
+  html:
+    self-contained: true
+    toc: true
+    toc-location: right
+    toc-title: "Obsah"
+    toc-depth: 3
+---
+
+## Zadání úlohy
+
+1. Stáhnu data dotazů ze Search Console.
+2. Pomocí OpenAI dotazy zjednodušeně oklasifikuju a nasegmentuju.
+3. Metriky za segmenty dotazů nějak vizualizuju.
+
+
+## Balíčky
+
+Připojím potřebné balíčky.
+
+```{r}
+#| label: libs
+library(tidyverse)
+library(searchConsoleR)
+library(openai)
+library(janitor)
+```
+
+## Načtení dat ze Search Console
+
+Autorizuju Search Console API.
+
+```{r}
+#| label: scr_auth
+scr_auth(email = Sys.getenv("MY_GOOGLE_ACCOUNT"))
+```
+
+Vyberu si účet, se kterým budu pracovat.
+
+```{r}
+#| label: list_websites
+#| eval: false
+list_websites() |> 
+  filter(str_detect(siteUrl, "cajtydne"))
+```
+
+Načtu dotazy ze Search Console.
+
+```{r}
+#| label: queries
+queries <- search_analytics(
+  siteURL = "https://www.cajtydne.cz/",
+  startDate = today() - 16,
+  endDate = today() - 3,
+  dimensions = "query",
+  dimensionFilterExp = "country==cze"
+)
+
+queries |> 
+  slice_max(order_by = impressions, n = 10)
+```
+
+## Klasifikace pomoci OpenAI API
+
+Definuju šablonu promptu.
+
+```{r}
+#| label: prompt_template
+prompt_template <- read_lines("
+Klasifikuj následující seznam vyhledávacích dotazů:
+
+{queries}
+
+U každého dotazu uveď, zda označuje čaj (ano/ne), a pokud ano, napiš typ čaje (černý, zelený, bílý, oolong, puerh) a zemi původu. Výsledky uspořádej do tabulky ve formátu CSV s hodnotami oddělenými čárkou.
+
+Příklad:
+dotaz,označuje čaj,typ čaje, země původu
+dračí studna,ano,zelený,Čína
+gaiwan,ne,,
+zelený čaj,ano,zelený,
+darjeeling,ano,černý,Indie
+", skip = 1) |> 
+  paste(collapse = "\n")
+
+cat(prompt_template)
+```
+
+Připravím funkci, která rozdělí dotazy do skupin po n položkách. Výsledek bude seznam (list) znakových vektorů. Na vzorku 45 dotazů vyzkouším, zda funkce funguje.
+
+```{r}
+#| label: split_vector
+split_vector <- function(x, n) {
+  split(x, ceiling(seq_along(x) / n)) |> 
+    map(paste, collapse = "\n")
+}
+
+queries$query |> 
+  head(45) |> 
+  split_vector(20)
+```
+
+Připravím funkci, která z jedné dávky dotazů a šablony sestaví prompt.
+
+```{r}
+#| label: build_prompt
+build_prompt <- function(queries, template) {
+  str_glue(prompt_template, queries = queries)
+}
+
+queries$query |> 
+  head(45) |> 
+  split_vector(20) |> 
+  pluck(1) |> 
+  build_prompt(prompt_template)
+```
+
+Vyzkouším si vytvoření více promptů pomocí funkce map. Zároveň zvolím vhodnou podmnožinu dotazů, abych pak API nepouštěl úplně na všechny.
+
+```{r}
+#| label: test_prompts
+queries |> 
+  filter(
+    impressions >= 2,
+    clicks > 0
+  ) |> 
+  pull(query) |> 
+  split_vector(20) |> 
+  map(build_prompt, template = prompt_template)
+```
+
+Vytvořím funkci pro volání OpenAI API a zavolám API se všemi prompty. Výsledek uložím do objektu `ai_answer` a ten si pak uložím na disk do složky `data`, abych při opakovaném spouštění nevolal placené API zbytečně znovu.
+
+```{r}
+#| label: call_ai
+call_ai <- function(prompt) {
+  response <- openai::create_chat_completion(
+    model = "gpt-3.5-turbo",
+    max_tokens = 2000,
+    temperature = 0,
+    messages = list(list(
+      "role" = "user",
+      "content" = prompt
+    ))
+  )
+  response$choices$message.content
+}
+
+ai_answer_file_path <- "data/ai_answer.rds"
+
+if (file.exists(ai_answer_file_path)) {
+  ai_answer <- read_rds(ai_answer_file_path)
+} else {
+  ai_answer <- queries |> 
+    filter(
+      impressions >= 2,
+      clicks > 0
+    ) |> 
+    pull(query) |> 
+    split_vector(20) |> 
+    map(build_prompt, template = prompt_template) |> 
+    map(call_ai)
+  
+  ai_answer |> write_rds(ai_answer_file_path)
+}
+```
+
+Z dat Search Console a odpovědi API vytvořím kompletní dataframe dotazů s metrikami i klasifikací.
+
+```{r}
+#| label: classified_queries
+classified_queries <- queries |> 
+  left_join(
+    ai_answer |> 
+      map(read_csv) |> 
+      list_rbind() |> 
+      janitor::clean_names() |> 
+      mutate(across(typ_caje:zeme_puvodu, \(x) na_if(x, ","))),
+    by = join_by(query == dotaz)
+  )
+```
+
+Prozkoumám výsledky
+
+```{r}
+#| label: show_results
+classified_queries |> 
+  filter(!is.na(oznacuje_caj)) |> 
+  slice_sample(n = 10)
+
+classified_queries |> count(oznacuje_caj, sort = TRUE)
+classified_queries |> count(typ_caje, sort = TRUE)
+classified_queries |> count(zeme_puvodu, sort = TRUE)
+```
+
+## Vizualizace
+
+Chci postupně zobrazit grafy pro všechny tři klasifikační dimenze. Abych se neopakoval, napíšu si na to funkci.
+
+```{r}
+#| label: plot_queries
+plot_queries <- function(queries, variable) {
+  queries |> 
+    group_by({{variable}}) |> 
+    summarise(
+      n = n(),
+      position = weighted.mean(position, impressions),
+      impressions = sum(impressions),
+      clicks = sum(clicks),
+      ctr = clicks / impressions
+    ) |> 
+    relocate(position, .after = ctr) |> 
+    pivot_longer(-{{variable}}, names_to = "metric") |> 
+    mutate(metric = as_factor(metric)) |> 
+    ggplot(aes(x = {{variable}}, y = value)) +
+    geom_col() +
+    facet_wrap(vars(metric), scales = "free", ncol = 2)
+}
+```
+
+
+```{r}
+#| label: plot_oznacuje_caj
+classified_queries |> 
+  filter(!is.na(oznacuje_caj)) |> 
+  plot_queries(oznacuje_caj)
+```
+
+```{r}
+#| label: plot_typ_caje
+classified_queries |> 
+  filter(!is.na(typ_caje)) |> 
+  plot_queries(typ_caje) +
+  coord_flip()
+```
+
+```{r}
+#| label: plot_zeme_puvodu
+classified_queries |> 
+  filter(!is.na(zeme_puvodu)) |> 
+  plot_queries(zeme_puvodu) +
+  coord_flip()
+```
