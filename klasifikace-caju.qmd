@@ -22,6 +22,7 @@ format:
 1. Stáhnu data dotazů ze Search Console.
 2. Pomocí OpenAI dotazy zjednodušeně oklasifikuju a nasegmentuju.
 3. Metriky za segmenty dotazů nějak vizualizuju.
+4. Klasifikaci dotazů uložím do Google Sheets pro Looker Studio.
 
 
 ## Balíčky
@@ -34,6 +35,7 @@ library(tidyverse)
 library(searchConsoleR)
 library(openai)
 library(janitor)
+library(googlesheets4)
 ```
 
 ## Načtení dat ze Search Console
@@ -250,3 +252,21 @@ classified_queries |>
   plot_queries(zeme_puvodu) +
   coord_flip()
 ```
+
+## Zápis klasifikace do Google Sheets
+
+```{r}
+#| label: gs_init
+spreadsheet_id <- "1oEGm7bAmJfC_efGu-unXdhHw9AGxMTmWULslLiNWrCY"
+sheet_name <- "queries"
+gs4_auth(email = Sys.getenv("MY_GOOGLE_ACCOUNT"))
+```
+
+```{r}
+#| label: write_sheet
+classified_queries |> 
+  filter(!is.na(oznacuje_caj)) |> 
+  select(query, oznacuje_caj:zeme_puvodu) |> 
+  write_sheet(spreadsheet_id, sheet_name)
+```
+

@@ -8,6 +8,7 @@ Marek Prokop
 1.  Stáhnu data dotazů ze Search Console.
 2.  Pomocí OpenAI dotazy zjednodušeně oklasifikuju a nasegmentuju.
 3.  Metriky za segmenty dotazů nějak vizualizuju.
+4.  Klasifikaci dotazů uložím do Google Sheets pro Looker Studio.
 
 ## Balíčky
 
@@ -18,6 +19,7 @@ library(tidyverse)
 library(searchConsoleR)
 library(openai)
 library(janitor)
+library(googlesheets4)
 ```
 
 ## Načtení dat ze Search Console
@@ -328,28 +330,28 @@ classified_queries |>
   slice_sample(n = 10)
 ```
 
-                         query clicks impressions         ctr position oznacuje_caj
-    1     japonský čaj kukicha      1           4 0.250000000 2.000000          ano
-    2                      cha      1         681 0.001468429 7.977974          ano
-    3          gaba čaj účinky      2          12 0.166666667 1.000000          ano
-    4               pai mu tan      1          28 0.035714286 8.000000          ano
-    5                   ya bao      1           4 0.250000000 1.000000          ano
-    6  zelený čaj dračí studna      1           2 0.500000000 7.000000          ano
-    7              gong fu cha      1          21 0.047619048 7.476190          ano
-    8             tamaryokucha      1          13 0.076923077 2.230769          ano
-    9             draci studna      1          17 0.058823529 2.764706          ano
-    10            pivonka bila      1          24 0.041666667 5.458333          ano
-                   typ_caje zeme_puvodu
-    1                zelený    Japonsko
-    2                  <NA>        <NA>
-    3                oolong   Tchaj-wan
-    4                  bílý        Čína
-    5                  bílý        Čína
-    6                zelený        Čína
-    7  černý/oolong/červený        Čína
-    8                zelený    Japonsko
-    9                zelený        Čína
-    10                 bílý        Čína
+                    query clicks impressions        ctr position oznacuje_caj
+    1    čaj dračí studna      1           7 0.14285714 4.000000          ano
+    2  kukicha čaj účinky      1          28 0.03571429 4.892857          ano
+    3          pai mu tan      1          28 0.03571429 8.000000          ano
+    4        draci studna      1          17 0.05882353 2.764706          ano
+    5         hojicha čaj      2           5 0.40000000 1.000000          ano
+    6        nejlepší čaj      1          14 0.07142857 5.642857          ano
+    7            gaba čaj      1          16 0.06250000 2.875000          ano
+    8       sencha matcha      1           8 0.12500000 1.375000          ano
+    9            čaj gaba      4           6 0.66666667 2.000000          ano
+    10       lisovaný čaj      1           5 0.20000000 1.600000          ano
+       typ_caje zeme_puvodu
+    1    zelený        Čína
+    2    zelený    Japonsko
+    3      bílý        Čína
+    4    zelený        Čína
+    5    zelený    Japonsko
+    6      <NA>        <NA>
+    7    oolong   Tchaj-wan
+    8    zelený    Japonsko
+    9    oolong   Tchaj-wan
+    10    puerh        Čína
 
 ``` r
 classified_queries |> count(oznacuje_caj, sort = TRUE)
@@ -436,3 +438,18 @@ classified_queries |>
 ```
 
 ![](klasifikace-caju_files/figure-commonmark/plot_zeme_puvodu-1.png)
+
+## Zápis klasifikace do Google Sheets
+
+``` r
+spreadsheet_id <- "1oEGm7bAmJfC_efGu-unXdhHw9AGxMTmWULslLiNWrCY"
+sheet_name <- "queries"
+gs4_auth(email = Sys.getenv("MY_GOOGLE_ACCOUNT"))
+```
+
+``` r
+classified_queries |> 
+  filter(!is.na(oznacuje_caj)) |> 
+  select(query, oznacuje_caj:zeme_puvodu) |> 
+  write_sheet(spreadsheet_id, sheet_name)
+```
