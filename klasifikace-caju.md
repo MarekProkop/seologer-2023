@@ -1,18 +1,46 @@
 Klasifikace dotazů ze Search Console pomocí OpenAI API
 ================
 Marek Prokop
-5. 5. 2023
+7. 5. 2023
 
 ## Zadání úlohy
 
 1.  Stáhnu data dotazů ze Search Console.
 2.  Pomocí OpenAI dotazy zjednodušeně oklasifikuju a nasegmentuju.
 3.  Metriky za segmenty dotazů nějak vizualizuju.
-4.  Klasifikaci dotazů uložím do Google Sheets pro Looker Studio.
+4.  Klasifikaci dotazů uložím do [Google
+    Sheets](https://docs.google.com/spreadsheets/d/1oEGm7bAmJfC_efGu-unXdhHw9AGxMTmWULslLiNWrCY/edit#gid=1853344797)
+    pro [Looker
+    Studio](https://lookerstudio.google.com/u/0/reporting/6ecd0996-1f8e-4b4a-b26d-742285b25abb/page/p_yuweto9s5c).
+
+## Příprava
+
+Musíte mít přístup k [Search
+Consoli](https://search.google.com/search-console) alespoň jednoho webu.
+Dále musíte mít přístup k [OpenAI API](https://platform.openai.com/) a
+[vygenerovaný API klíč](https://platform.openai.com/account/api-keys).
+
+Skript počítá s tím, že máte v proměnné prostředí `MY_GOOGLE_ACCOUNT`
+uloženou e-mailovou adresu svého Google účtu a v proměnné prostředí
+`OPENAI_API_KEY` klíč k API OpenAI. Tyto proměnné vytvoříte např. takto:
+
+1.  Nainstalujte si balíček *usethis*.
+
+2.  Z konsole zadejte příkaz `usethis::edit_r_environ()`. Tím se vám v
+    editoru otevře soubor *.Renviron*.
+
+3.  Do souboru *.Renviron* přidejte tyto dva řádky s upravenými
+    hodnotami:
+
+        MY_GOOGLE_ACCOUNT = "vas.email@gmail.com"
+        OPENAI_API_KEY = "váš_api_key"
+
+4.  Soubor uložte a restartujte R (v RStudiu příkazem *Restart R* z menu
+    *Session*).
 
 ## Balíčky
 
-Připojím potřebné balíčky.
+Připojím potřebné balíčky. Pokud je nemáte nainstalované, nainstalujte.
 
 ``` r
 library(tidyverse)
@@ -30,7 +58,7 @@ Autorizuju Search Console API.
 scr_auth(email = Sys.getenv("MY_GOOGLE_ACCOUNT"))
 ```
 
-Vyberu si účet, se kterým budu pracovat.
+Vyberu si účet, se kterým budu pracovat. Vy si vyberte nějaký svůj.
 
 ``` r
 list_websites() |> 
@@ -52,21 +80,23 @@ queries |>
   slice_max(order_by = impressions, n = 10)
 ```
 
-               query clicks impressions         ctr position
-    1            cha      1         681 0.001468429 7.977974
-    2     darjeeling      2         287 0.006968641 7.435540
-    3         gaiwan      5         104 0.048076923 4.961538
-    4        kukicha     10          77 0.129870130 3.376623
-    5   dračí studna      0          76 0.000000000 4.618421
-    6         oolong      0          75 0.000000000 6.186667
-    7        hojicha     10          57 0.175438596 1.385965
-    8     vodní víla      1          43 0.023255814 2.790698
-    9  gruzínský čaj      0          43 0.000000000 7.930233
-    10  pivoňka bílá      0          40 0.000000000 5.725000
+                query clicks impressions         ctr position
+    1             cha      0         644 0.000000000 8.613354
+    2      darjeeling      2         249 0.008032129 8.413655
+    3          gaiwan      5         107 0.046728972 4.915888
+    4    dračí studna      0          76 0.000000000 4.697368
+    5         kukicha      9          69 0.130434783 3.275362
+    6         hojicha      8          52 0.153846154 1.576923
+    7   gruzínský čaj      0          44 0.000000000 7.840909
+    8      vodní víla      1          41 0.024390244 2.878049
+    9    pivoňka bílá      0          38 0.000000000 5.526316
+    10 čaj darjeeling      1          36 0.027777778 2.666667
 
 ## Klasifikace pomoci OpenAI API
 
-Definuju šablonu promptu.
+Definuju šablonu promptu. Vy si definujte svou šablonu, kterou si předem
+otestujte přímo v ChatGPT nebo v ještě lépe v
+[Playougroundu](https://platform.openai.com/playground).
 
 ``` r
 prompt_template <- read_lines("
@@ -117,13 +147,13 @@ queries$query |>
 ```
 
     $`1`
-    [1] "hojicha\nkukicha\nčaj týdne\ngaiwan\nčaj gaba\ngaba oolong\nútesový čaj\ndarjeeling\ngaba čaj účinky\nhojicha čaj\nhojicha čaj účinky\nkukicha čaj\nmatcha iri sencha\nutesovy caj\nyue guang bai\nzheng shan xiao zhong\nčaj kukicha\nbílá pivoňka čaj\ncha\nda hong pao"
+    [1] "kukicha\nhojicha\nčaj týdne\ngaiwan\nkukicha čaj\nčaj gaba\ngaba oolong\ndarjeeling\ngaba čaj\ngaba čaj účinky\nhojicha čaj účinky\nmatcha iri sencha\nya bao\nyue guang bai\nbílá pivoňka čaj\nda hong pao\ndarjeeling margaret's hope\ndian hong gong fu\ndraci studna\ndračí oči čaj"
 
     $`2`
-    [1] "darjeeling margaret's hope\ndian hong gong fu\ndraci studna\ngaba caj\ngaba čaj\ngaiwan sada\ngong fu cha\nhohicha\njaponský čaj kukicha\nkukicha čaj účinky\nlisovaný čaj\nliu bao tea\nmi lan xiang\nnejlepší čaj\noolong gaba\npai mu tan\npivonka bila\nsencha matcha\nsilný zelený čaj\ntamaryokucha"
+    [1] "gaba caj\ngaiwan sada\ngong fu cha\nhohicha\nhojicha čaj\njaponský čaj kukicha\nkukicha čaj účinky\nlisovaný čaj\nliu bao tea\nnejlepší čaj\noolong gaba\npai mu tan\npivonka bila\nsencha matcha\nsilný zelený čaj\ntamaryokucha\ntie guan yin\nutesovy caj\nutesovy čaj\nvodní víla"
 
     $`3`
-    [1] "tie guan yin\ntinderet\ntung ting\nutesovy čaj\nvodní víla"
+    [1] "vonící orchidej\nxiao zhong\nyin zhen\nzheng shan xiao zhong\nzlaty caj"
 
 Připravím funkci, která z jedné dávky dotazů a šablony sestaví prompt.
 
@@ -141,26 +171,26 @@ queries$query |>
 
     Klasifikuj následující seznam vyhledávacích dotazů:
 
-    hojicha
     kukicha
+    hojicha
     čaj týdne
     gaiwan
+    kukicha čaj
     čaj gaba
     gaba oolong
-    útesový čaj
     darjeeling
+    gaba čaj
     gaba čaj účinky
-    hojicha čaj
     hojicha čaj účinky
-    kukicha čaj
     matcha iri sencha
-    utesovy caj
+    ya bao
     yue guang bai
-    zheng shan xiao zhong
-    čaj kukicha
     bílá pivoňka čaj
-    cha
     da hong pao
+    darjeeling margaret's hope
+    dian hong gong fu
+    draci studna
+    dračí oči čaj
 
     U každého dotazu uveď, zda označuje čaj (ano/ne), a pokud ano, napiš typ čaje (černý, zelený, bílý, oolong, puerh) a zemi původu. Výsledky uspořádej do tabulky ve formátu CSV s hodnotami oddělenými čárkou.
 
@@ -188,26 +218,26 @@ queries |>
     $`1`
     Klasifikuj následující seznam vyhledávacích dotazů:
 
-    hojicha
     kukicha
+    hojicha
     čaj týdne
     gaiwan
+    kukicha čaj
     čaj gaba
     gaba oolong
-    útesový čaj
     darjeeling
+    gaba čaj
     gaba čaj účinky
-    hojicha čaj
     hojicha čaj účinky
-    kukicha čaj
     matcha iri sencha
-    utesovy caj
+    ya bao
     yue guang bai
-    zheng shan xiao zhong
-    čaj kukicha
     bílá pivoňka čaj
-    cha
     da hong pao
+    darjeeling margaret's hope
+    dian hong gong fu
+    draci studna
+    dračí oči čaj
 
     U každého dotazu uveď, zda označuje čaj (ano/ne), a pokud ano, napiš typ čaje (černý, zelený, bílý, oolong, puerh) a zemi původu. Výsledky uspořádej do tabulky ve formátu CSV s hodnotami oddělenými čárkou.
 
@@ -221,13 +251,10 @@ queries |>
     $`2`
     Klasifikuj následující seznam vyhledávacích dotazů:
 
-    darjeeling margaret's hope
-    dian hong gong fu
-    draci studna
     gaba caj
-    gaba čaj
     gaiwan sada
     gong fu cha
+    hojicha čaj
     japonský čaj kukicha
     kukicha čaj účinky
     lisovaný čaj
@@ -239,8 +266,11 @@ queries |>
     silný zelený čaj
     tamaryokucha
     tie guan yin
+    utesovy caj
     vodní víla
-    vonící orchidej
+    yin zhen
+    zlaty caj
+    útesový čaj
 
     U každého dotazu uveď, zda označuje čaj (ano/ne), a pokud ano, napiš typ čaje (černý, zelený, bílý, oolong, puerh) a zemi původu. Výsledky uspořádej do tabulky ve formátu CSV s hodnotami oddělenými čárkou.
 
@@ -254,11 +284,9 @@ queries |>
     $`3`
     Klasifikuj následující seznam vyhledávacích dotazů:
 
-    ya bao
-    zelený čaj dračí studna
-    zlaty caj
     čaj darjeeling
     čaj dračí studna
+    čaj kukicha
 
     U každého dotazu uveď, zda označuje čaj (ano/ne), a pokud ano, napiš typ čaje (černý, zelený, bílý, oolong, puerh) a zemi původu. Výsledky uspořádej do tabulky ve formátu CSV s hodnotami oddělenými čárkou.
 
@@ -273,6 +301,10 @@ Vytvořím funkci pro volání OpenAI API a zavolám API se všemi prompty.
 Výsledek uložím do objektu `ai_answer` a ten si pak uložím na disk do
 složky `data`, abych při opakovaném spouštění nevolal placené API
 zbytečně znovu.
+
+Když to budete poprvé zkoušet s vlastními daty, musíte před tím ze
+složky `data` zrušit soubor `ai_answer.rds`. Jinak by se vám z něho
+načitala moje data.
 
 ``` r
 call_ai <- function(prompt) {
@@ -331,34 +363,34 @@ classified_queries |>
 ```
 
                     query clicks impressions        ctr position oznacuje_caj
-    1    čaj dračí studna      1           7 0.14285714 4.000000          ano
-    2  kukicha čaj účinky      1          28 0.03571429 4.892857          ano
-    3          pai mu tan      1          28 0.03571429 8.000000          ano
-    4        draci studna      1          17 0.05882353 2.764706          ano
-    5         hojicha čaj      2           5 0.40000000 1.000000          ano
-    6        nejlepší čaj      1          14 0.07142857 5.642857          ano
-    7            gaba čaj      1          16 0.06250000 2.875000          ano
-    8       sencha matcha      1           8 0.12500000 1.375000          ano
-    9            čaj gaba      4           6 0.66666667 2.000000          ano
-    10       lisovaný čaj      1           5 0.20000000 1.600000          ano
+    1  kukicha čaj účinky      1          30 0.03333333 5.000000          ano
+    2    bílá pivoňka čaj      1           4 0.25000000 1.000000          ano
+    3             hojicha      8          52 0.15384615 1.576923          ano
+    4    čaj dračí studna      1           7 0.14285714 4.000000          ano
+    5      čaj darjeeling      1          36 0.02777778 2.666667          ano
+    6         gaiwan sada      1           9 0.11111111 1.000000           ne
+    7         hojicha čaj      1           4 0.25000000 1.000000          ano
+    8                 cha      0         644 0.00000000 8.613354          ano
+    9        lisovaný čaj      1           4 0.25000000 1.500000          ano
+    10  matcha iri sencha      2           5 0.40000000 1.000000          ano
        typ_caje zeme_puvodu
-    1    zelený        Čína
-    2    zelený    Japonsko
-    3      bílý        Čína
+    1    zelený    Japonsko
+    2      bílý        Čína
+    3    zelený    Japonsko
     4    zelený        Čína
-    5    zelený    Japonsko
+    5     černý       Indie
     6      <NA>        <NA>
-    7    oolong   Tchaj-wan
-    8    zelený    Japonsko
-    9    oolong   Tchaj-wan
-    10    puerh        Čína
+    7    zelený    Japonsko
+    8      <NA>        <NA>
+    9     puerh        Čína
+    10   zelený    Japonsko
 
 ``` r
 classified_queries |> count(oznacuje_caj, sort = TRUE)
 ```
 
       oznacuje_caj   n
-    1         <NA> 448
+    1         <NA> 419
     2          ano  42
     3           ne   3
 
@@ -367,7 +399,7 @@ classified_queries |> count(typ_caje, sort = TRUE)
 ```
 
                   typ_caje   n
-    1                 <NA> 454
+    1                 <NA> 425
     2               zelený  15
     3                černý   9
     4               oolong   7
@@ -380,7 +412,7 @@ classified_queries |> count(zeme_puvodu, sort = TRUE)
 ```
 
         zeme_puvodu   n
-    1          <NA> 454
+    1          <NA> 425
     2          Čína  18
     3      Japonsko  11
     4     Tchaj-wan   5
