@@ -19,15 +19,33 @@ format:
 
 ## Zadání úlohy
 
-1. Stáhnu data dotazů ze Search Console.
-2. Pomocí OpenAI dotazy zjednodušeně oklasifikuju a nasegmentuju.
-3. Metriky za segmenty dotazů nějak vizualizuju.
-4. Klasifikaci dotazů uložím do Google Sheets pro Looker Studio.
+1.  Stáhnu data dotazů ze Search Console.
+2.  Pomocí OpenAI dotazy zjednodušeně oklasifikuju a nasegmentuju.
+3.  Metriky za segmenty dotazů nějak vizualizuju.
+4.  Klasifikaci dotazů uložím do [Google Sheets](https://docs.google.com/spreadsheets/d/1oEGm7bAmJfC_efGu-unXdhHw9AGxMTmWULslLiNWrCY/edit#gid=1853344797) pro [Looker Studio](https://lookerstudio.google.com/u/0/reporting/6ecd0996-1f8e-4b4a-b26d-742285b25abb/page/p_yuweto9s5c).
 
+## Příprava
+
+Musíte mít přístup k [Search Consoli](https://search.google.com/search-console) alespoň jednoho webu. Dále musíte mít přístup k [OpenAI API](https://platform.openai.com/) a [vygenerovaný API klíč](https://platform.openai.com/account/api-keys).
+
+Skript počítá s tím, že máte v proměnné prostředí `MY_GOOGLE_ACCOUNT` uloženou e-mailovou adresu svého Google účtu a v proměnné prostředí `OPENAI_API_KEY` klíč k API OpenAI. Tyto proměnné vytvoříte např. takto:
+
+1.  Nainstalujte si balíček *usethis*.
+
+2.  Z konsole zadejte příkaz `usethis::edit_r_environ()`. Tím se vám v editoru otevře soubor *.Renviron*.
+
+3.  Do souboru *.Renviron* přidejte tyto dva řádky s upravenými hodnotami:
+
+    ```         
+    MY_GOOGLE_ACCOUNT = "vas.email@gmail.com"
+    OPENAI_API_KEY = "váš_api_key"
+    ```
+
+4.  Soubor uložte a restartujte R (v RStudiu příkazem *Restart R* z menu *Session*).
 
 ## Balíčky
 
-Připojím potřebné balíčky.
+Připojím potřebné balíčky. Pokud je nemáte nainstalované, nainstalujte.
 
 ```{r}
 #| label: libs
@@ -47,7 +65,7 @@ Autorizuju Search Console API.
 scr_auth(email = Sys.getenv("MY_GOOGLE_ACCOUNT"))
 ```
 
-Vyberu si účet, se kterým budu pracovat.
+Vyberu si účet, se kterým budu pracovat. Vy si vyberte nějaký svůj.
 
 ```{r}
 #| label: list_websites
@@ -74,7 +92,7 @@ queries |>
 
 ## Klasifikace pomoci OpenAI API
 
-Definuju šablonu promptu.
+Definuju šablonu promptu. Vy si definujte svou šablonu, kterou si předem otestujte přímo v ChatGPT nebo v ještě lépe v [Playougroundu](https://platform.openai.com/playground).
 
 ```{r}
 #| label: prompt_template
@@ -141,6 +159,8 @@ queries |>
 ```
 
 Vytvořím funkci pro volání OpenAI API a zavolám API se všemi prompty. Výsledek uložím do objektu `ai_answer` a ten si pak uložím na disk do složky `data`, abych při opakovaném spouštění nevolal placené API zbytečně znovu.
+
+Když to budete poprvé zkoušet s vlastními daty, musíte před tím ze složky `data` zrušit soubor `ai_answer.rds`. Jinak by se vám z něho načitala moje data.
 
 ```{r}
 #| label: call_ai
@@ -229,7 +249,6 @@ plot_queries <- function(queries, variable) {
 }
 ```
 
-
 ```{r}
 #| label: plot_oznacuje_caj
 classified_queries |> 
@@ -255,6 +274,8 @@ classified_queries |>
 
 ## Zápis klasifikace do Google Sheets
 
+Vytvořte si vlastní Google spreadsheet (může být prázdný) a dejte se jeho id místo mého. Na spreadsheet pak napojte vlastní report v Looker Studiu podle [tohoto vzoru](https://lookerstudio.google.com/u/0/reporting/6ecd0996-1f8e-4b4a-b26d-742285b25abb/page/p_yuweto9s5c).
+
 ```{r}
 #| label: gs_init
 spreadsheet_id <- "1oEGm7bAmJfC_efGu-unXdhHw9AGxMTmWULslLiNWrCY"
@@ -269,4 +290,3 @@ classified_queries |>
   select(query, oznacuje_caj:zeme_puvodu) |> 
   write_sheet(spreadsheet_id, sheet_name)
 ```
-
